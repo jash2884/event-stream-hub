@@ -1,0 +1,138 @@
+ACTIVITY FEED + NOTIFICATIONS SYSTEM — DESIGN DOC (BRIEF)
+Version: 1.1
+Date: 2026-02-04
+
+1) GOALS / REQUIREMENTS
+- Ingest events: POST /events { actor_id, verb, object_type, object_id, target_user_ids[], created_at? } -> { event_id }
+- Feed retrieval: GET /feed?user_id=&cursor=&limit=  stable pagination, newest-first, fast P95 at large history
+- Realtime notifications: GET /notifications/stream?user_id= (SSE or WS), push events
+- Poll fallback: GET /notifications?user_id=&since=
+- Analytics: GET /top?window=1m|5m|1h -> top 100 most frequent object_id (or verbs) “as real-time as possible”
+
+Assumptions / load targets:
+- Event size: 0.5–2KB
+- Read heavy: feed reads >> event writes
+- Concurrency: ~2,000 concurrent (mix feed + stream)
+- Total stored events: 200M
+- P95 feed should remain fast even with large history
+
+2) HIGH-LEVEL ARCHITECTURE
+Core services (logical):
+- API (Event + Feed + Notifications + Analytics endpoints)
+- Storage (events + per-user feed index + notifications)
+- Realtime (SSE/WS connection manager)
+- Analytics (sliding window top-k)
+
+Production-shaped reference (even if local impl is simpler):
+Clients -> API Gateway -> Event Ingestion -> (Queue) -> Fanout worker -> Feed store
+                                   \-> Notification push (pub/sub)
+                                   \-> Analytics window counter
+
+3) FANOUT STRATEGY (HYBRID)
+Problem: fanout-on-write gives fast reads but amplifies writes for high-fanout actors.
+Approach:
+- Default: fanout-on-write for “normal” actors/targets (precompute per-user feed index entries).
+- For “celebrity” actors (very high follower count): fanout-on-read for those events:
+  - Store event once in events table
+  - On read: merge “celebrity recent events” with user’s precomputed feed
+
+This keeps P95 reads low for most users while preventing extreme write amplification.
+
+4) DATA MODEL + INDEXING (PROD-ORIENTED)
+Events (append-only):
+- events(event_id PK, actor_id, verb, object_type, object_id, created_at, metadata)
+Indexes:
+- (created_at DESC) for time scans
+- (object_id, created_at DESC) for analytics / object drilldown
+- (actor_id, created_at DESC) optional for profile activity
+
+Per-user feed index (denormalized “edge table”):
+- user_feeds(user_id, created_at, event_id) with composite key for stable pagination
+Indexes:
+- (user_id, created_at DESC, event_id) supports newest-first cursor pagination
+Partitioning (prod):
+- range partition by created_at (monthly/weekly) for pruning + retention
+
+Notifications:
+- notifications(user_id, event_id, read, notified_at)
+Indexes:
+- (user_id, notified_at DESC)
+- (user_id, read, notified_at DESC) for unread badge
+
+5) FEED PAGINATION (STABLE, NEWEST-FIRST)
+Cursor design:
+- Cursor encodes (created_at, event_id) of the last item in the page.
+Query pattern:
+- First page: WHERE user_id=? ORDER BY created_at DESC, event_id DESC LIMIT ?
+- Next page: WHERE (created_at, event_id) < (cursor_created_at, cursor_event_id)
+Why this is stable:
+- No OFFSET; avoids shifting pages when new events arrive
+- Tie-breaker on event_id ensures strict ordering
+
+6) CACHING STRATEGY
+Goals: reduce DB reads for hot feeds and reduce tail latency.
+- Hot feed cache (Redis/in-memory): last N items per active user (e.g., 100)
+  - write-through on fanout write; TTL 10–30 min
+- Cursor/result cache: cache first page for heavy users (short TTL)
+- Celebrity cache: recent events for high-fanout actors for read-time merge
+Stampede protection:
+- single-flight per key + jittered TTL / early refresh
+
+7) NOTIFICATION PIPELINE (PUSH + PULL)
+Realtime delivery (SSE recommended):
+- Connection registry keyed by user_id
+- On event ingestion/fanout: if target user has active stream -> push event
+- Heartbeat to keep connections alive; enforce backpressure:
+  - bounded per-connection buffer
+  - drop policy + client “catch-up” via polling endpoint
+
+Polling fallback:
+- /notifications?since= returns latest notifications since timestamp (or last known id)
+- Client dedup by event_id
+
+8) DELIVERY SEMANTICS / IDEMPOTENCY
+Ingestion is typically at-least-once (retries happen).
+Idempotency options:
+- Client supplies Idempotency-Key; server stores key->event_id in cache/db with TTL.
+- If replayed, return same event_id.
+Push delivery:
+- Best-effort (at-most-once) for realtime; reliability achieved via polling catch-up.
+End-to-end:
+- “At-least-once storage, best-effort push, eventually consistent UX with dedup.”
+
+9) ANALYTICS: TOP-100 WINDOWED COUNTING
+Requirement: “as real-time as possible” for windows 1m/5m/1h.
+Approach: ring-buffer (sliding window):
+- For each window, maintain N buckets (1 bucket/sec or 1 bucket/5s).
+- Each bucket is a hashmap counter: object_id -> count.
+- Maintain a running total map (object_id -> total in window) updated on bucket rotate:
+  - increment in current bucket and total map
+  - when time advances, expire the oldest bucket: subtract its counts from total map
+Top-K query:
+- compute top 100 from total map (partial sort / heap)
+Tradeoffs:
+- exact counts but memory depends on unique objects in window
+- optional approximate mode: count-min sketch + exact heap for top candidates
+
+10) SCALING PLAN (10× TRAFFIC + 10× EVENTS)
+API:
+- horizontal scale; separate realtime nodes if needed (sticky sessions or pub/sub)
+Storage:
+- read replicas for feed reads
+- sharding by user_id when single cluster becomes bottleneck
+- time partitioning + retention/archival for events (200M -> 2B)
+Caching:
+- Redis cluster shard/scale; increase hot feed coverage
+Queue:
+- partitioned topics; scale fanout workers; monitor consumer lag
+
+11) FAILURE MODES + MITIGATIONS
+- Dropped events (worker crash): durable queue; retry + DLQ; reconciliation job
+- Reconnect storms: exponential backoff + jitter; admission control; heartbeats
+- Backpressure on streams: bounded buffers; degrade to polling; rate limit
+- Hot keys/partitions: consistent hashing, celeb read-merge, cache sharding
+
+12) LOCAL IMPLEMENTATION NOTE
+Local implementation can collapse components into one service + local DB/in-memory maps,
+but the APIs and data-access patterns should mirror the production design above.
+

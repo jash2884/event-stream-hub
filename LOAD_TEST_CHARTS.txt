@@ -1,0 +1,62 @@
+LOAD TEST CHARTS (TEXT) — ACTIVITY FEED + NOTIFICATIONS SYSTEM
+Date: 2026-02-04
+
+This file is meant to accompany LOAD_TEST_REPORT.txt.
+Once you fill the matrix with real measurements, update these charts with the same values.
+
+----------------------------------------------------------------------
+CHART A) RPS BY ENDPOINT (EXAMPLE PLACEHOLDER)
+
+Endpoint           RPS
+/top               ______  ############################
+/notifications     ______  ########################
+/feed              ______  ####################
+/events            ______  ###############
+
+----------------------------------------------------------------------
+CHART B) FEED MEAN LATENCY vs STORED EVENTS (PICK A FIXED CONCURRENCY, e.g. 1000)
+
+Stored events   mean(ms)
+100k            ______   ####################
+300k            ______   ########################
+500k            ______   ############################
+700k            ______   ################################
+900k            ______   ####################################
+
+----------------------------------------------------------------------
+CHART C) FEED MEAN LATENCY vs CONCURRENCY (PICK A FIXED STORED EVENTS, e.g. 500k)
+
+Concurrency    mean(ms)
+200            ______   ####################
+600            ______   ########################
+1000           ______   ############################
+1400           ______   ################################
+1800           ______   ####################################
+
+----------------------------------------------------------------------
+CHART D) CPU / MEMORY SNAPSHOT (PLACEHOLDER)
+
+Concurrency  CPU(avg/peak)   Mem(peak MB)
+200          ____/____        ____
+600          ____/____        ____
+1000         ____/____        ____
+1400         ____/____        ____
+1800         ____/____        ____
+
+----------------------------------------------------------------------
+CHART E) P95 COMPLIANCE QUICK CHECK (FEED)
+
+Target: Feed P95 < 50ms
+
+Stored events  c=200  c=600  c=1000  c=1400  c=1800
+100k           __     __     __      __      __
+300k           __     __     __      __      __
+500k           __     __     __      __      __
+700k           __     __     __      __      __
+900k           __     __     __      __      __
+
+Legend suggestion:
+  OK  = <50ms
+  WARN= 50-100ms
+  BAD = >100ms
+

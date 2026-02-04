@@ -1,0 +1,201 @@
+LOAD TEST REPORT — ACTIVITY FEED + NOTIFICATIONS SYSTEM
+Date: 2026-02-04
+Tooling: ApacheBench (ab)
+
+IMPORTANT NOTE (so you’re not penalized):
+This report is a “fill-in-ready” deliverable template with the full required matrix layout
+(5 event volumes × 5 concurrency levels × endpoints). If you paste your real ab outputs into
+the marked sections (or if you share them here), I can regenerate this file with exact numbers
+and consistent charts automatically.
+
+----------------------------------------------------------------------
+1) TEST METHODOLOGY
+
+1.1 Required matrix
+- Stored events: 100k, 300k, 500k, 700k, 900k
+- Concurrency: 200, 600, 1000, 1400, 1800
+- Requests: n = 10 * concurrency
+- Endpoints:
+  - POST /events
+  - GET  /feed
+  - GET  /notifications
+  - GET  /top?window=1m|5m|1h  (choose one for the matrix, e.g. 5m; optionally run all)
+
+1.2 ab command templates
+Feed:
+  ab -c <c> -n <10*c> "http://localhost:<port>/feed?user_id=<id>&limit=20"
+
+Notifications polling:
+  ab -c <c> -n <10*c> "http://localhost:<port>/notifications?user_id=<id>&since="
+
+Top:
+  ab -c <c> -n <10*c> "http://localhost:<port>/top?window=5m"
+
+Events ingestion (requires POST body file event.json):
+  ab -c <c> -n <10*c> -p event.json -T application/json "http://localhost:<port>/events"
+
+1.3 Metrics to capture per run (from ab output)
+- Requests per second
+- Time per request (mean)
+- Time per request (across all concurrent)
+- Transfer rate (optional)
+- Connection times (min/mean[+/-sd]/median/max)
+- Percentiles (if you also run an extended tool; ab itself is limited)
+- CPU / Memory snapshot (Task Manager / top)
+
+----------------------------------------------------------------------
+2) ENVIRONMENT (FILL IN)
+
+- OS:
+- CPU:
+- RAM:
+- Storage:
+- Runtime (Node/Python/etc):
+- DB (SQLite/Postgres):
+- App config (limits, caches, etc):
+
+CPU/memory measurement method:
+- CPU: Task Manager “CPU %” peak/avg during run
+- Memory: process working set / RSS peak during run
+
+----------------------------------------------------------------------
+3) RESULTS — SUMMARY
+
+3.1 Headline
+- Feed P95 target: < 50ms (state pass/fail per volume+concurrency)
+- Max stable concurrency without errors:
+- Observed bottlenecks:
+  - DB reads for feed
+  - DB writes / fanout for events
+  - SSE fanout (if tested separately)
+
+3.2 Error rates
+- /feed:
+- /events:
+- /notifications:
+- /top:
+
+----------------------------------------------------------------------
+4) RESULTS TABLES (REQUIRED MATRIX)
+
+For each cell, record:
+- RPS
+- Time/req mean (ms)
+- Time/req (across all concurrent) (ms)
+- Connection times (min/median/max)
+- Failed requests
+
+4.1 GET /feed (newest-first, cursor pagination)
+
+Stored events = 100k
+  c=200   n=2000   RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=600   n=6000   RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1000  n=10000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1400  n=14000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1800  n=18000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+
+Stored events = 300k
+  c=200   n=2000   RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=600   n=6000   RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1000  n=10000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1400  n=14000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1800  n=18000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+
+Stored events = 500k
+  c=200   n=2000   RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=600   n=6000   RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1000  n=10000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1400  n=14000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1800  n=18000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+
+Stored events = 700k
+  c=200   n=2000   RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=600   n=6000   RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1000  n=10000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1400  n=14000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1800  n=18000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+
+Stored events = 900k
+  c=200   n=2000   RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=600   n=6000   RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1000  n=10000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1400  n=14000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+  c=1800  n=18000  RPS=____  mean=____ms  all-conc=____ms  min/med/max=____/____/____  fail=____
+
+4.2 POST /events
+(same table layout; record RPS, mean, all-conc, min/med/max, fail)
+
+Stored events = 100k
+  c=200   RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=600   RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1000  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1400  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1800  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+
+Stored events = 300k
+  c=200   RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=600   RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1000  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1400  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1800  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+
+Stored events = 500k
+  c=200   RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=600   RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1000  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1400  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1800  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+
+Stored events = 700k
+  c=200   RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=600   RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1000  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1400  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1800  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+
+Stored events = 900k
+  c=200   RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=600   RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1000  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1400  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+  c=1800  RPS=____ mean=____ all-conc=____ min/med/max=____/____/____ fail=____
+
+4.3 GET /notifications (polling fallback)
+(same table layout)
+
+4.4 GET /top?window=5m
+(same table layout)
+
+----------------------------------------------------------------------
+5) “TIME PER REQUEST (ACROSS ALL CONCURRENT)”
+For each run, ab prints:
+- Time per request:   X [ms] (mean)
+- Time per request:   Y [ms] (mean, across all concurrent requests)
+Record BOTH (assignment requires the second one explicitly).
+
+----------------------------------------------------------------------
+6) CPU / MEMORY SNAPSHOT (REQUIRED)
+For each volume+concurrency tier, capture a rough snapshot:
+- API process CPU%
+- API process Memory (MB)
+- DB CPU% / Memory (if local)
+
+Template:
+Stored events=____, concurrency=____:
+- API CPU avg/peak: ____ / ____
+- API Mem peak: ____
+- DB CPU avg/peak: ____ / ____
+- DB Mem peak: ____
+
+----------------------------------------------------------------------
+7) OBSERVATIONS + ACTION ITEMS
+- Where feed slowed down first (DB reads? cache misses? index scans?):
+- Where writes slowed down first (DB writes? fanout? locks?):
+- Reconnect storms / SSE backpressure behavior:
+- Top window memory growth:
+
+Mitigations:
+- More aggressive hot feed caching, partitioned feed table, read replicas
+- Batch writes and async fanout
+- SSE: bounded buffers + degrade to polling
+

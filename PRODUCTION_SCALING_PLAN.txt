@@ -1,0 +1,129 @@
+IF THIS RAN IN PROD — SCALING PLAN (10× TRAFFIC + 10× EVENTS)
+Date: 2026-02-04
+
+Target evolution:
+- Concurrency: ~2,000 -> ~20,000 concurrent (feed + streams)
+- Stored events: 200M -> 2B
+- Maintain fast feed P95, stable pagination, near-realtime analytics
+
+----------------------------------------------------------------------
+1) SERVICE SPLITS (WHEN YOU OUTGROW A MONOLITH)
+
+Split responsibilities to scale independently:
+- Ingestion API (write-optimized): POST /events
+- Feed API (read-optimized): GET /feed
+- Notifications (connection-heavy): SSE/WS gateway nodes
+- Fanout workers (background): compute feed indices + notifications persistence
+- Analytics workers (background): sliding windows + top-k
+
+Use a message bus for durability and smoothing spikes:
+- Kafka/Pulsar/Redis Streams for event pipeline
+
+----------------------------------------------------------------------
+2) STORAGE SCALING
+
+2.1 Partitioning (first win)
+- Partition feed index by time (weekly/monthly) to keep indexes small + prune quickly
+- Partition events by time for lifecycle management (TTL/archive)
+
+2.2 Read replicas (read-heavy workload)
+- Add replicas dedicated to GET /feed
+- Keep ingestion writes on primary
+- Use connection pooling (pgBouncer) to avoid pool exhaustion
+
+2.3 Sharding (when single cluster is the bottleneck)
+Shard key: user_id (for user feed reads)
+- Shard routing: hash(user_id) -> shard
+- Writes:
+  - events table can be global (append-only) or sharded; feeds are best sharded by user_id
+- Reads:
+  - GET /feed hits a single shard for that user
+
+2.4 Cold storage / retention
+- Keep “feed index” hot window (e.g., 90 days) in primary storage
+- Archive older events to object storage (S3/GCS) or cheaper DB tier
+
+----------------------------------------------------------------------
+3) FEED LATENCY: CACHING + PRECOMPUTE
+
+3.1 Hot feed cache
+- Cache first page (and maybe second) for active users
+- Invalidate/write-through on fanout write
+- Use request coalescing to prevent stampedes
+
+3.2 Cursor stability
+- Cursor = (created_at, event_id) or monotonic sequence id
+- Avoid OFFSET; always keyset pagination
+
+3.3 Celebrity handling
+- Hybrid fanout threshold (tune over time):
+  - normal users: fanout-on-write
+  - celebrities: fanout-on-read merge from “celebrity recent events” cache
+This prevents extreme write amplification with large follower graphs.
+
+----------------------------------------------------------------------
+4) NOTIFICATIONS AT 20K+ CONNECTIONS
+
+4.1 SSE/WS gateway tier
+- Dedicated notification gateway nodes optimized for many open sockets
+- Sticky sessions or consistent hashing by user_id to keep a user on one node
+
+4.2 Pub/Sub for cross-node delivery
+- Redis Pub/Sub, NATS, or Kafka topic to broadcast “user_id -> event”
+- Gateways subscribe and push to their connected users
+
+4.3 Backpressure + reconnect storms
+- Per-connection bounded queue; drop oldest when full
+- Heartbeats; detect slow clients and degrade them to polling
+- Reconnect: exponential backoff + jitter; admission control (caps new conns/sec)
+
+----------------------------------------------------------------------
+5) ANALYTICS AT SCALE (TOP-100 WINDOWED)
+
+5.1 Sliding window ring buffer (exact)
+- Bucketed counts; rotate and subtract on expiry
+- Top-k extraction using heap / partial sort
+
+5.2 Distributed aggregation (10×)
+- Each shard/worker maintains local top-k
+- Aggregator merges (k-way merge) to produce global top-100
+
+5.3 Approximate option
+- Count-Min Sketch for high cardinality, plus exact counters for top candidates
+
+----------------------------------------------------------------------
+6) RELIABILITY / DELIVERY SEMANTICS
+
+6.1 Ingestion: at-least-once + idempotency
+- Accept Idempotency-Key; store key->event_id (TTL)
+- Safe retries; duplicates suppressed
+
+6.2 Push: best-effort + catch-up
+- SSE/WS push is at-most-once
+- Poll endpoint supports since= to catch up
+- Client dedup by event_id
+
+6.3 Observability
+- SLOs: feed P95, push delivery lag, queue consumer lag, error rate
+- Alerts: consumer lag, DB saturation, cache hit rate drop, reconnect storms
+
+----------------------------------------------------------------------
+7) FAILURE MODES AND MITIGATIONS (QUICK LIST)
+
+- Dropped events: durable queue + DLQ + replay tool
+- Consumer lag: autoscale workers + partition rebalancing
+- DB overload: cache, replicas, shed noncritical traffic, rate limit
+- Hot partitions: celebrity split, consistent hashing, repartitioning tooling
+- Stream overload: backpressure, queue bounds, degrade to polling
+
+----------------------------------------------------------------------
+8) PRACTICAL 10× CHECKLIST
+
+- [ ] Add read replicas for feed reads
+- [ ] Add Redis cluster for hot feeds + cursors + idempotency keys
+- [ ] Add durable queue for fanout + analytics
+- [ ] Separate notification gateways from API nodes
+- [ ] Shard feeds by user_id when DB becomes the bottleneck
+- [ ] Partition by time for retention + query pruning
+- [ ] Implement autoscaling policies + SLO-based alerts
+
