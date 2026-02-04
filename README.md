@@ -1,73 +1,127 @@
-# Welcome to your Lovable project
+# Activity Feed + Notifications System (UI)
 
-## Project info
+This folder contains the **frontend UI** for a mini “activity feed + notifications” system (GitHub/LinkedIn style). It includes pages to explore:
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+- Activity feed (pull model)
+- Realtime notifications stream (push model via SSE)
+- Polling notifications fallback
+- Windowed “Top 100” analytics
 
-## How can I edit this code?
+> Note: The UI assumes there is a backend API that exposes the required endpoints (`/events`, `/feed`, `/notifications/stream`, `/notifications`, `/top`). If your backend runs on a different port/host, configure the API base URL accordingly (see “Configuration” below).
 
-There are several ways of editing your application.
+---
 
-**Use Lovable**
+## Prerequisites
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- Node.js 18+ (recommended)
+- npm 9+ (or pnpm/yarn if you prefer)
 
-Changes made via Lovable will be committed automatically to this repo.
+---
 
-**Use your preferred IDE**
+## Install
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+From `event-stream-hub/`:
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+npm install
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+---
 
-# Step 3: Install the necessary dependencies.
-npm i
+## Run (dev)
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```sh
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Then open the URL printed by Vite (typically `http://localhost:5173`).
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+---
 
-**Use GitHub Codespaces**
+## Build & Preview
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```sh
+npm run build
+npm run preview
+```
 
-## What technologies are used for this project?
+---
 
-This project is built with:
+## Configuration
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+If your backend API is not served from the same origin as the UI, you will typically need one of these:
 
-## How can I deploy this project?
+- A Vite proxy configuration (recommended in dev)
+- CORS enabled on the backend
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+Search for API calls / base URL usage in:
 
-## Can I connect a custom domain to my Lovable project?
+- `src/components/feed/ActivityFeed.tsx`
+- `src/components/notifications/NotificationPanel.tsx`
+- `src/components/analytics/*`
+- `src/components/api/ApiPlayground.tsx`
 
-Yes, you can!
+---
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## API Contract (Backend)
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+The UI is built around these endpoints:
+
+### Event ingestion
+
+- `POST /events`
+- Body:
+  - `actor_id`, `verb`, `object_type`, `object_id`, `target_user_ids[]`, optional `created_at`
+- Response: `{ "event_id": "..." }`
+
+### Feed retrieval
+
+- `GET /feed?user_id=<id>&cursor=<optional>&limit=<optional>`
+- Response: `{ "items": [...], "next_cursor": "..." | null }`
+- Requirements:
+  - Stable, paginated, newest-first (keyset pagination recommended)
+
+### Notifications
+
+- `GET /notifications/stream?user_id=<id>` (SSE or WebSocket)
+- `GET /notifications?user_id=<id>&since=<optional>` (polling fallback)
+
+### Analytics
+
+- `GET /top?window=1m|5m|1h`
+- Response: `{ "items": [top100...], ... }`
+
+Auth is mocked for the assignment (assume a `user_id` header or query param as your backend expects).
+
+---
+
+## Load Testing (ab)
+
+The assignment requires running `ab` across:
+
+- Stored events: 100k, 300k, 500k, 700k, 900k
+- Concurrency: 200, 600, 1000, 1400, 1800
+- Requests: `n = 10 * concurrency`
+
+Example commands (backend host/port may differ):
+
+```sh
+ab -c 200 -n 2000 "http://localhost:3000/feed?user_id=user_123&limit=20"
+ab -c 1000 -n 10000 "http://localhost:3000/notifications?user_id=user_123"
+ab -c 600 -n 6000 "http://localhost:3000/top?window=5m"
+```
+
+For `POST /events`, create an `event.json` file and run:
+
+```sh
+ab -c 200 -n 2000 -p event.json -T application/json "http://localhost:3000/events"
+```
+
+---
+
+## Tech Stack
+
+- Vite + React + TypeScript
+- Tailwind CSS + shadcn/ui
+- React Router
+- Recharts (analytics charts)
