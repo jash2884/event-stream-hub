@@ -1,13 +1,31 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { MainLayout } from '@/components/layout/MainLayout';
+import { ActivityFeed } from '@/components/feed/ActivityFeed';
+import { EventSimulator } from '@/components/simulator/EventSimulator';
+import { ApiPlayground } from '@/components/api/ApiPlayground';
+import { SystemMetricsPanel } from '@/components/analytics/SystemMetricsPanel';
+import { motion } from 'framer-motion';
 
 const Index = () => {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
-    </div>
+    <MainLayout>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+      >
+        {/* Main Feed */}
+        <div className="lg:col-span-2">
+          <ActivityFeed />
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          <EventSimulator />
+          <SystemMetricsPanel />
+          <ApiPlayground />
+        </div>
+      </motion.div>
+    </MainLayout>
   );
 };
 
